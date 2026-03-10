@@ -2,23 +2,19 @@ name: Custom Youtube Market Research
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 毎日午前9時は自動実行
-  workflow_dispatch: # ← ここに入力フォームを作成します
+    - cron: '0 0 * * *'
+  workflow_dispatch:
     inputs:
       search_query:
-        description: '検索キーワード (例: 龍が如く3, ベトナム 旅行)'
+        description: '検索キーワード'
         required: true
         default: '龍が如く3'
       video_duration:
-        description: '動画の長さ (any:すべて, short:ショート, medium:4-20分)'
+        description: '動画の長さ'
         required: true
         default: 'short'
         type: choice
-        options:
-          - any
-          - short
-          - medium
-          - long
+        options: [any, short, medium, long]
 
 jobs:
   build:
@@ -35,12 +31,18 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install google-api-python-client pandas jinja2
 
       - name: Run research script
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          # 画面から入力された値をPythonに渡す
           INPUT_QUERY: ${{ github.event.inputs.search_query }}
           INPUT_DURATION: ${{ github.event.inputs.video_duration }}
         run: python main.py
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages # ★ここをWebサイト用にする
