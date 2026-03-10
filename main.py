@@ -1,5 +1,4 @@
 import os
-import pandas as pd
 from googleapiclient.discovery import build
 from datetime import datetime, timedelta
 from jinja2 import Template
@@ -7,14 +6,14 @@ from jinja2 import Template
 API_KEY = os.getenv('YOUTUBE_API_KEY')
 SEARCH_QUERY = '龍が如く3 OR 龍が如く極3 #Shorts'
 
-def get_market_data():
+def fetch_data(days_ago):
     youtube = build('youtube', 'v3', developerKey=API_KEY)
-    one_year_ago = (datetime.now() - timedelta(days=365)).isoformat() + 'Z'
+    time_threshold = (datetime.now() - timedelta(days=days_ago)).isoformat() + 'Z'
     
     search_res = youtube.search().list(
         q=SEARCH_QUERY, part='snippet', maxResults=50,
         type='video', videoDuration='short',
-        publishedAfter=one_year_ago, relevanceLanguage='ja'
+        publishedAfter=time_threshold, relevanceLanguage='ja'
     ).execute()
 
     data_list = []
@@ -36,38 +35,76 @@ def get_market_data():
                 'url': f"https://www.youtube.com/shorts/{v_id}",
                 'date': item['snippet']['publishedAt'][:10]
             })
-    return data_list
+    return sorted(data_list, key=lambda x: x['ratio'], reverse=True)
 
-results = get_market_data()
+# データを2種類取得
+weekly_data = fetch_data(7)   # 直近7日間
+yearly_data = fetch_data(365) # 直近1年間
 
+# HTMLテンプレート
 html_template = """
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>龍が如く極3 ショート動画調査</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>龍が如く極3 市場調査</title>
     <style>
-        body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
-        .card { background: white; margin-bottom: 10px; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .ratio { color: #d32f2f; font-weight: bold; font-size: 1.2em; }
-        a { color: #1a73e8; text-decoration: none; font-weight: bold; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #1c1e21; }
+        .container { max-width: 900px; margin: auto; }
+        h1 { color: #d32f2f; text-align: center; }
+        h2 { border-left: 5px solid #d32f2f; padding-left: 10px; margin-top: 30px; background: #fff; padding-top: 10px; padding-bottom: 10px; }
+        .card { background: white; margin-bottom: 15px; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); }
+        .title { font-weight: bold; font-size: 1.1em; display: block; margin-bottom: 8px; color: #000; text-decoration: none; }
+        .info { font-size: 0.9em; color: #65676b; margin-bottom: 10px; }
+        .stats { display: flex; gap: 20px; align-items: center; }
+        .ratio-badge { background: #ffeb3b; color: #000; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 1em; }
+        .weekly-tag { color: #fff; background: #d32f2f; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-bottom: 5px; display: inline-block; }
     </style>
 </head>
 <body>
-    <h1>龍が如く極3 市場調査レポート ({{ date }})</h1>
-    {% for row in data %}
-    <div class="card">
-        <div><strong>{{ row.title }}</strong></div>
-        <div>ch: {{ row.channel }} (登録者: {{ row.subs }})</div>
-        <div>再生数: {{ row.views }} / <span class="ratio">拡散率: {{ row.ratio }}倍</span></div>
-        <a href="{{ row.url }}" target="_blank">▶ 動画を見る</a>
+    <div class="container">
+        <h1>龍が如く極3 市場調査ダッシュボード</h1>
+        <p style="text-align:center;">最終更新: {{ now }}</p>
+
+        <h2>🔥 直近1週間の急上昇 (Weekly)</h2>
+        {% for row in weekly %}
+        <div class="card">
+            <span class="weekly-tag">NEW / WEEKLY</span>
+            <a href="{{ row.url }}" target="_blank" class="title">{{ row.title }}</a>
+            <div class="info">{{ row.channel }} | 投稿日: {{ row.date }}</div>
+            <div class="stats">
+                <div>登録者: {{ row.subs }}</div>
+                <div>再生数: {{ "{:,}".format(row.views) }}</div>
+                <div class="ratio-badge">拡散率: {{ row.ratio }}倍</div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <h2>📊 直近1年間のバズ動画 (Yearly)</h2>
+        {% for row in yearly %}
+        <div class="card">
+            <a href="{{ row.url }}" target="_blank" class="title">{{ row.title }}</a>
+            <div class="info">{{ row.channel }} | 投稿日: {{ row.date }}</div>
+            <div class="stats">
+                <div>登録者: {{ row.subs }}</div>
+                <div>再生数: {{ "{:,}".format(row.views) }}</div>
+                <div class="ratio-badge">拡散率: {{ row.ratio }}倍</div>
+            </div>
+        </div>
+        {% endfor %}
     </div>
-    {% endfor %}
 </body>
 </html>
 """
+
 template = Template(html_template)
-report_html = template.render(data=results, date=datetime.now().strftime('%Y-%m-%d'))
+report_html = template.render(
+    weekly=weekly_data, 
+    yearly=yearly_data, 
+    now=datetime.now().strftime('%Y-%m-%d %H:%M')
+)
 
 with open("index.html", "w", encoding="utf-8") as f:
     f.write(report_html)
