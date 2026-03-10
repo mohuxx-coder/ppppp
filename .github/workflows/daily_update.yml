@@ -1,15 +1,30 @@
-name: Daily Youtube Market Research
+name: Custom Youtube Market Research
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 毎日日本時間の午前9時に自動実行
-  workflow_dispatch: # ボタン一つで手動実行もできるようにする設定
+    - cron: '0 0 * * *' # 毎日午前9時は自動実行
+  workflow_dispatch: # ← ここに入力フォームを作成します
+    inputs:
+      search_query:
+        description: '検索キーワード (例: 龍が如く3, ベトナム 旅行)'
+        required: true
+        default: '龍が如く3'
+      video_duration:
+        description: '動画の長さ (any:すべて, short:ショート, medium:4-20分)'
+        required: true
+        default: 'short'
+        type: choice
+        options:
+          - any
+          - short
+          - medium
+          - long
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 実行結果を保存するために必要
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -20,18 +35,12 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run research script
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          # 画面から入力された値をPythonに渡す
+          INPUT_QUERY: ${{ github.event.inputs.search_query }}
+          INPUT_DURATION: ${{ github.event.inputs.video_duration }}
         run: python main.py
-
-      - name: Commit and Push index.html
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add index.html
-          git commit -m "Update research report" || exit 0
-          git push
